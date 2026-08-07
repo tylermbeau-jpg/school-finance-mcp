@@ -1,0 +1,4 @@
+mcp>=1.27
+
+# Development / tests
+pytest>=9.0
