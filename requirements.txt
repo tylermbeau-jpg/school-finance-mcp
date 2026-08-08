@@ -1,4 +1,4 @@
-mcp>=1.27
+mcp>=1.10,<2
 
 # Development / tests
-pytest>=9.0
+pytest>=8.0
