@@ -1,5 +1,7 @@
 # School Finance MCP
 
+[![CI](https://github.com/tylermbeau-jpg/school-finance-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tylermbeau-jpg/school-finance-mcp/actions/workflows/ci.yml)
+
 A Model Context Protocol (MCP) server that gives an LLM agent first-class tools for California school finance:
 
 - Validate and decode **SACS account strings** (the state's 19-digit Standardized Account Code Structure).
@@ -36,7 +38,7 @@ Example: `01-0000-0-1110-1000-1100` is General Fund, unrestricted, no project ye
 Requires Python 3.10 or newer.
 
 ```bash
-git clone <your-repo-url> school-finance-mcp
+git clone https://github.com/tylermbeau-jpg/school-finance-mcp.git
 cd school-finance-mcp
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -U pip
