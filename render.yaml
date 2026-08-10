@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: school-finance-mcp
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: python -m school_finance_mcp --transport http --host 0.0.0.0
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6

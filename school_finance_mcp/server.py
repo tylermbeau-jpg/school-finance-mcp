@@ -1,16 +1,22 @@
 """School Finance MCP server.
 
 Exposes California SACS account-string tools and a school-meal reimbursement
-calculator over the Model Context Protocol (stdio transport).
+calculator over the Model Context Protocol. Speaks stdio by default for local
+clients, or streamable HTTP (at /mcp) for remote use.
 """
 
 from __future__ import annotations
+
+import argparse
+import os
 
 from mcp.server.fastmcp import FastMCP
 
 from . import cnp, sacs
 
-mcp = FastMCP("school-finance")
+# stateless_http: every tool here is a pure function, so remote HTTP mode needs
+# no per-session state and stays deployable behind restarts and load balancers.
+mcp = FastMCP("school-finance", stateless_http=True)
 
 
 @mcp.tool()
@@ -82,8 +88,36 @@ def calculate_meal_reimbursement(
 
 
 def main() -> None:
-    """Run the MCP server over stdio."""
-    mcp.run()
+    """Run the MCP server over stdio (default) or streamable HTTP."""
+    parser = argparse.ArgumentParser(
+        prog="school-finance-mcp",
+        description="California school-finance MCP server",
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="stdio for local clients (default); http serves streamable HTTP at /mcp",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address for http transport (use 0.0.0.0 in a container)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", "8000")),
+        help="port for http transport (defaults to $PORT if set, else 8000)",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "http":
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
 
 
 if __name__ == "__main__":

@@ -7,8 +7,8 @@ MCP server for California school finance, built from public CDE/USDA data only. 
 ## Commands
 
 - Setup: `python3.12 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"` (needs Python 3.10+)
-- Run: `.venv/bin/python -m school_finance_mcp` (MCP over stdio; no HTTP server)
-- Tests: `.venv/bin/python -m pytest -q` (SACS + CNP suites; keep them passing)
+- Run: `.venv/bin/python -m school_finance_mcp` (MCP over stdio, the default) or `--transport http` for streamable HTTP at /mcp (`--host`/`--port`, $PORT respected; render.yaml deploys this mode)
+- Tests: `.venv/bin/python -m pytest -q` (SACS + CNP suites plus an end-to-end HTTP transport test; keep them passing)
 
 ## Design boundaries
 

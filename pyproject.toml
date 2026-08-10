@@ -1,12 +1,12 @@
 [project]
 name = "school-finance-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for California SACS account-string validation and school-meal reimbursement"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Tyler Beauregard" }]
-keywords = ["mcp", "model-context-protocol", "school-finance", "sacs", "k-12", "california"]
+keywords = ["mcp", "model-context-protocol", "streamable-http", "school-finance", "sacs", "k-12", "california"]
 dependencies = ["mcp>=1.10,<2"]
 
 [project.optional-dependencies]

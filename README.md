@@ -51,7 +51,29 @@ python3.12 -m venv .venv
 .venv/bin/python -m school_finance_mcp
 ```
 
-The server speaks MCP over stdio, so it waits for an MCP client to connect (it will not print anything on its own). Connect it to Claude Desktop or Claude Code below, or test it with any MCP client.
+The server speaks MCP over stdio by default, so it waits for an MCP client to connect (it will not print anything on its own). Connect it to Claude Desktop or Claude Code below, or test it with any MCP client.
+
+## Run as a remote server (streamable HTTP)
+
+The same server can serve MCP over streamable HTTP, at the `/mcp` path:
+
+```bash
+.venv/bin/python -m school_finance_mcp --transport http
+```
+
+That listens on `http://127.0.0.1:8000/mcp` (`--host` and `--port` to change it; `$PORT` is respected for cloud platforms). Connect Claude Code to it:
+
+```bash
+claude mcp add --transport http school-finance http://127.0.0.1:8000/mcp
+```
+
+The HTTP mode is stateless (every tool is a pure function), so it works behind restarts and load balancers with no session store.
+
+### Deploy to Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tylermbeau-jpg/school-finance-mcp)
+
+The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`. After deploying, your endpoint is `https://<your-service>.onrender.com/mcp`. Note that free-tier services sleep when idle, so the first request after a quiet period takes a few seconds.
 
 ## Test
 
