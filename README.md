@@ -9,6 +9,12 @@ A Model Context Protocol (MCP) server that gives an LLM agent first-class tools 
 
 It is a small, self-contained server built with the official MCP Python SDK (FastMCP). The point is to take a gnarly, real-world domain (California K-12 fund accounting and child-nutrition reimbursement) and expose it as clean, agent-callable tools with typed inputs and structured output.
 
+A live instance runs at `https://school-finance-mcp.onrender.com/mcp` (streamable HTTP, free tier, so the first request after idle takes a few seconds). Try it:
+
+```bash
+claude mcp add --transport http school-finance https://school-finance-mcp.onrender.com/mcp
+```
+
 ## Tools
 
 | Tool | What it does |
@@ -73,7 +79,7 @@ The HTTP mode is stateless (every tool is a pure function), so it works behind r
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tylermbeau-jpg/school-finance-mcp)
 
-The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`. After deploying, your endpoint is `https://<your-service>.onrender.com/mcp`. Note that free-tier services sleep when idle, so the first request after a quiet period takes a few seconds.
+The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`. After deploying, your endpoint is `https://<your-service>.onrender.com/mcp` (the reference instance above runs from exactly this blueprint). Render's hostname is allowed through DNS rebinding protection automatically via `$RENDER_EXTERNAL_HOSTNAME`; on other platforms, pass your public hostname with `--allowed-host`. Free-tier services sleep when idle, so the first request after a quiet period takes a few seconds.
 
 ## Test
 
