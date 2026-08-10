@@ -11,6 +11,7 @@ import argparse
 import os
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from . import cnp, sacs
 
@@ -87,6 +88,28 @@ def calculate_meal_reimbursement(
     )
 
 
+def http_transport_security(extra_hosts: list[str]) -> TransportSecuritySettings:
+    """Build the Host-header allowlist for http mode.
+
+    Localhost forms are always allowed. On Render, the public hostname arrives
+    via $RENDER_EXTERNAL_HOSTNAME and is allowed automatically. Pass "*" as an
+    extra host to disable DNS rebinding protection entirely (only sensible
+    behind a proxy that already pins the Host header).
+    """
+    if "*" in extra_hosts:
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+    hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+    if render_host:
+        extra_hosts = [*extra_hosts, render_host]
+    for host in extra_hosts:
+        hosts.extend([host, f"{host}:*"])
+        origins.extend([f"https://{host}", f"http://{host}"])
+    return TransportSecuritySettings(allowed_hosts=hosts, allowed_origins=origins)
+
+
 def main() -> None:
     """Run the MCP server over stdio (default) or streamable HTTP."""
     parser = argparse.ArgumentParser(
@@ -110,11 +133,21 @@ def main() -> None:
         default=int(os.environ.get("PORT", "8000")),
         help="port for http transport (defaults to $PORT if set, else 8000)",
     )
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        default=[],
+        metavar="HOST",
+        help="extra Host header value to accept in http mode (repeatable); "
+        "localhost and $RENDER_EXTERNAL_HOSTNAME are always allowed; "
+        "'*' disables the host check",
+    )
     args = parser.parse_args()
 
     if args.transport == "http":
         mcp.settings.host = args.host
         mcp.settings.port = args.port
+        mcp.settings.transport_security = http_transport_security(args.allowed_host)
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
