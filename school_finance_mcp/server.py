@@ -21,16 +21,23 @@ mcp = FastMCP("school-finance", stateless_http=True)
 
 
 @mcp.tool()
-def validate_sacs_string(account_string: str) -> dict:
-    """Validate a California SACS account string.
+def validate_sacs_string(account_string: str, fiscal_year: str | None = None) -> dict:
+    """Validate a California SACS account string against CDE's rules.
 
     Accepts a delimited form ("01-0000-0-1110-1000-1100") or a packed 19-digit
-    form. Checks field widths, numeric content, and known codes. Returns
-    `valid`, structural `errors`, `warnings` for unrecognized codes, the parsed
-    `components`, and a `normalized` form. Structural and known-code checks only;
-    full valid-combination validation requires the CDE tables.
+    form. Checks field widths and numeric content, then CDE's valid-code lists
+    (CHECKFUND, CHECKRESOURCE, CHECKGOAL, CHECKFUNCTION, CHECKOBJECT) and the
+    seven valid-combination matrices (CHK-FUNDxRESOURCE, CHK-FUNDxGOAL,
+    CHK-FUNDxFUNCTION-A/B, CHK-FUNDxOBJECT, CHK-FUNCTIONxOBJECT,
+    CHK-GOALxFUNCTION-A/B, CHK-RESOURCExOBJECTA/B) under the same check ids the
+    SACS technical review uses. Returns `valid`, structural `errors`, heuristic
+    `warnings`, `components`, `normalized`, `tables` (fiscal year applied) and
+    `cde_checks` (code errors, combination errors with CDE severity, passed,
+    not covered, not evaluated). `fiscal_year` like "2025-26" selects that
+    year's tables; default is the latest on file. Reports problems only; it does
+    not propose replacement codes or check balances.
     """
-    return sacs.validate(account_string)
+    return sacs.validate(account_string, fiscal_year)
 
 
 @mcp.tool()
@@ -45,12 +52,14 @@ def decode_sacs_string(account_string: str) -> dict:
 
 
 @mcp.tool()
-def list_sacs_codes(field: str) -> dict:
-    """List known SACS codes for a field.
+def list_sacs_codes(field: str, fiscal_year: str | None = None) -> dict:
+    """List CDE's valid SACS codes for a field, with descriptive reference.
 
     `field` is one of: fund, resource, project_year, goal, function, object.
+    For the five coded dimensions the result carries CDE's full `codes`
+    list for the fiscal year (`fiscal_year` like "2025-26"; default latest).
     """
-    return sacs.list_codes(field)
+    return sacs.list_codes(field, fiscal_year)
 
 
 @mcp.tool()

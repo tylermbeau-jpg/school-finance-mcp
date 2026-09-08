@@ -19,9 +19,9 @@ claude mcp add --transport http school-finance https://school-finance-mcp.onrend
 
 | Tool | What it does |
 |---|---|
-| `validate_sacs_string` | Validate a SACS account string. Accepts delimited (`01-0000-0-1110-1000-1100`) or packed 19-digit form. Checks field widths, numeric content, and known codes. Returns `valid`, structural `errors`, `warnings`, parsed `components`, and a `normalized` form. |
+| `validate_sacs_string` | Validate a SACS account string against CDE's rules. Accepts delimited (`01-0000-0-1110-1000-1100`) or packed 19-digit form. Checks structure, then CDE's valid-code lists and all seven valid-combination matrices, reported under the technical review's own check ids with CDE's severity. Optional `fiscal_year` ("2025-26"); default is the latest tables on file. |
 | `decode_sacs_string` | Decode a SACS string into its six components (fund, resource, project year, goal, function, object), each with its code and a human-readable description, plus the resource restriction band. |
-| `list_sacs_codes` | List the known codes or ranges for a field: `fund`, `resource`, `project_year`, `goal`, `function`, or `object`. |
+| `list_sacs_codes` | CDE's full valid-code list for `fund`, `resource`, `goal`, `function`, or `object` (optional `fiscal_year`), plus descriptive reference: series, ranges, common names. `project_year` returns its definition. |
 | `calculate_meal_reimbursement` | Compute federal (and optional California Universal Meals) reimbursement from counts of lunches and breakfasts by category, with tier flags for high-ISP lunch, severe-need breakfast, performance-based certification, and the CA state top-up. Returns an itemized breakdown. |
 
 ## The SACS account string
@@ -38,6 +38,20 @@ The CDE state account string is 19 digits across six fields:
 | Object | 4 | The type of revenue, expenditure, or balance-sheet item. |
 
 Example: `01-0000-0-1110-1000-1100` is General Fund, unrestricted, no project year, General Education K-12, Instruction, certificated teacher salaries.
+
+## Valid combinations
+
+CDE publishes, each fiscal year, the valid codes for every SACS dimension and seven matrices of which codes may be combined. The SACS Web System's technical review applies them under check ids like `CHK-FUNDxRESOURCE`; a failing check is what stops an official export. `validate_sacs_string` applies the same tables to one string and reports under the same ids, so its output compares line for line with the TRC screen:
+
+```
+validate_sacs_string("21-5310-0-0000-3700-4700")
+-> valid: false, tables: "2026-27"
+   combination_errors: CHK-FUNDxRESOURCE (W): Fund 21 is not valid with Resource 5310 ...
+```
+
+Scoping follows CDE: Goal x Function applies only to expenditure objects and to functions 1000-1999, 4000-5999 and 7200-7999 (except 7210); Resource x Object splits into A (objects 8000-9999) and B (1000-7999) and skips the beginning-balance objects 9791/9793/9795; Fund x Function is fatal (B) for funds 01, 09 and 62 and a warning (A) elsewhere. A code missing from CDE's list fails its CHECK<DIM> once and the combinations involving it are listed as not evaluated. Pairs a matrix does not cover are listed as not covered rather than claimed either way.
+
+This is the check, not the fix: the server proposes no replacement codes, checks no balances or transfers, and reads no export files. The tables live in `school_finance_mcp/data/combos_<year>.json`, generated from CDE's valid-combination spreadsheets (a cell counts as valid when CDE marks it valid for school districts). A new fiscal year means regenerating the file from CDE's release and citing it in the commit.
 
 ## Install
 
@@ -117,12 +131,13 @@ Reference data is built from public sources and is current for school year 2025-
 - CDE SACS account-code structure and valid codes: https://www.cde.ca.gov/fg/ac/ac/
 - CDE SACS Import File Specifications (field widths): https://www.cde.ca.gov/fg/ac/ac/importspecs.asp
 - CDE Valid Codes and Combinations: https://www.cde.ca.gov/fg/ac/ac/validcodes.asp
+- CDE valid-combination spreadsheets (source of `data/combos_<year>.json`): https://www.cde.ca.gov/fg/ac/ac/sprvalidcombs.asp
 - USDA FNS National Average Payment rates, SY 2025-26: https://www.fns.usda.gov/schoolmeals/fr-072425
 - CDE California Universal Meals: https://www.cde.ca.gov/ls/nu/sn/cauniversalmeals.asp
 
 ## Disclaimer
 
-This server is illustrative. SACS validation here is structural plus known-code lookup; it does not perform the full valid-combination check the CDE enforces (which Resource, Goal, Function, and Object codes are allowed together, by entity type). Meal rates are the published SY 2025-26 figures and the California reimbursement model is simplified. For official work, validate against the CDE's downloadable valid-code and valid-combination tables and confirm current rates and apportionment rules with USDA FNS and the CDE.
+This server is illustrative. SACS validation here covers structure, CDE's valid codes, and CDE's valid combinations for school districts (the D flag in CDE's matrices) for one string at a time; it does not check balances, transfers, or whole export files, and it proposes no corrections. Meal rates are the published SY 2025-26 figures and the California reimbursement model is simplified. For official work, run the SACS Web System's technical review on the full export and confirm current rates and apportionment rules with USDA FNS and the CDE.
 
 ## License
 

@@ -6,16 +6,17 @@ and decoder. This is built from the public CDE SACS specification, not from any
 district's internal chart of accounts.
 
 Scope and honesty: the validator checks field structure (widths, numeric, total
-length) and looks up known codes and ranges. It does NOT perform the full
-valid-combination check that the CDE enforces (which Resource/Goal/Function/
-Object combinations are allowed together, by entity type). For official
-validation, use the CDE's downloadable valid-code and valid-combination tables,
-refreshed each fiscal year. See README for sources.
+length), then runs the CDE valid-code and valid-combination checks from
+`combos` (CDE's published tables, reported under the technical review's own
+check ids). It proposes no corrections, checks no balances, and reads no
+export files; for that, run a full pre-flight against the SACS Web System.
 """
 
 from __future__ import annotations
 
 import re
+
+from . import combos
 
 # Field order and widths per the CDE SACS Import File Specifications.
 FIELDS = [
@@ -165,12 +166,16 @@ def _components(account_string: str) -> list[str]:
     return out
 
 
-def validate(account_string: str) -> dict:
-    """Validate a SACS account string structurally and against known codes.
+def validate(account_string: str, fiscal_year: str | None = None) -> dict:
+    """Validate a SACS account string: structure, CDE valid codes, CDE valid
+    combinations.
 
-    Returns a dict with `valid` (bool), `errors` (structural failures),
-    `warnings` (unrecognized but possibly-valid codes), `components` (the six
-    field values), and `normalized` (canonical hyphen-delimited form).
+    Returns `valid` (bool), structural `errors`, heuristic `warnings`,
+    `components`, `normalized`, `tables` (the CDE fiscal year applied), and
+    `cde_checks` with `code_errors`, `combination_errors`, `passed`,
+    `not_covered` and `not_evaluated` lists keyed by CDE check id.
+    `fiscal_year` like "2025-26" picks that year's tables; default is the
+    latest on file.
     """
     try:
         comps = _components(account_string)
@@ -181,14 +186,12 @@ def validate(account_string: str) -> dict:
             "warnings": [],
             "components": None,
             "normalized": None,
+            "tables": None,
+            "cde_checks": None,
         }
 
     fund, resource, _py, goal, function, obj = comps
     warnings: list[str] = []
-    if fund not in FUNDS:
-        warnings.append(
-            f"fund '{fund}' is not in the common-fund list (may still be valid; CDE publishes the full list)"
-        )
     if obj[0] not in OBJECT_SERIES:
         warnings.append(f"object series '{obj[0]}xxx' is unrecognized")
     if function[0] not in FUNCTION_GROUPS:
@@ -196,12 +199,21 @@ def validate(account_string: str) -> dict:
     if not any(lo <= int(goal) <= hi for lo, hi, _ in GOAL_RANGES):
         warnings.append(f"goal '{goal}' falls outside the known goal ranges")
 
+    cde = combos.check(
+        {"fund": fund, "resource": resource, "goal": goal, "function": function, "object": obj},
+        fiscal_year,
+    )
+    if cde.get("error"):
+        warnings.append(cde["error"])
+    ok = not cde["code_errors"] and not cde["combination_errors"]
     return {
-        "valid": True,
+        "valid": ok,
         "errors": [],
         "warnings": warnings,
         "components": dict(zip([name for name, _ in FIELDS], comps)),
         "normalized": "-".join(comps),
+        "tables": cde["tables"],
+        "cde_checks": cde,
     }
 
 
@@ -252,14 +264,38 @@ def decode(account_string: str) -> dict:
     }
 
 
-def list_codes(field: str) -> dict:
-    """List the known codes for a SACS field.
+def list_codes(field: str, fiscal_year: str | None = None) -> dict:
+    """List CDE's valid codes for a SACS field, plus descriptive reference.
 
     `field` is one of: fund, resource, project_year, goal, function, object.
+    For the five coded dimensions the `codes` list is CDE's full list for
+    the fiscal year (default: latest tables on file).
     """
     f = (field or "").strip().lower().replace(" ", "_")
+    if f in ("fund", "resource", "goal", "function", "object"):
+        out = _reference(f)
+        cde = combos.valid_codes(f, fiscal_year)
+        out["tables"] = cde.get("tables")
+        out["codes"] = cde.get("codes", [])
+        if cde.get("error"):
+            out["error"] = cde["error"]
+            out["years_available"] = cde.get("years_available")
+        return out
+    if f in ("project_year", "year"):
+        return {
+            "field": "project_year",
+            "description": "1 digit. 0 = not applicable; 1-9 = grant or project year for multi-year resources.",
+        }
+    return {
+        "field": field,
+        "error": f"unknown field '{field}'. Use one of: fund, resource, project_year, goal, function, object.",
+    }
+
+
+def _reference(f: str) -> dict:
+    """Descriptive reference (series, ranges, common names) for one dimension."""
     if f == "fund":
-        return {"field": "fund", "note": "Common funds, not exhaustive; see CDE.", "codes": FUNDS}
+        return {"field": "fund", "common_funds": FUNDS}
     if f == "object":
         return {"field": "object", "series_by_leading_digit": OBJECT_SERIES, "examples": OBJECTS}
     if f == "function":
@@ -280,12 +316,4 @@ def list_codes(field: str) -> dict:
             },
             "examples": RESOURCES,
         }
-    if f in ("project_year", "year"):
-        return {
-            "field": "project_year",
-            "description": "1 digit. 0 = not applicable; 1-9 = grant or project year for multi-year resources.",
-        }
-    return {
-        "field": field,
-        "error": f"unknown field '{field}'. Use one of: fund, resource, project_year, goal, function, object.",
-    }
+    return {"field": f}
