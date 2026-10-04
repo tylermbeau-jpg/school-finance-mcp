@@ -94,7 +94,7 @@ The HTTP mode is stateless (every tool is a pure function), so it works behind r
 Two more things come with http mode:
 
 - `GET /health` returns `{"status": "ok"}` and is readable from any origin, so a status page or uptime check can tell a host that is still waking from a server that is up.
-- `--cors-origin https://your-site.example` (repeatable) lets a page on that origin call `/mcp` straight from the browser. Without it, browser calls from other origins are refused.
+- `--cors-origin https://your-site.example` (repeatable) lets a page on that origin call `/mcp` straight from the browser. Without it, browser calls from other origins are refused. On Render, the GitHub Pages origin of the deployed repo's owner (`https://<owner>.github.io`, read from `$RENDER_GIT_REPO_SLUG`) is allowed automatically, so a fork's own copy of the demo page works with no extra setup.
 
 The [live demo](https://tylermbeau-jpg.github.io/school-finance-mcp/) is a single static page in `docs/` that uses both. Add `?endpoint=https://your-server` to its URL to point it at another deployment.
 
@@ -102,7 +102,7 @@ The [live demo](https://tylermbeau-jpg.github.io/school-finance-mcp/) is a singl
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tylermbeau-jpg/school-finance-mcp)
 
-The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`, plus a `--cors-origin` for this repo's demo page (change or drop it in your own fork). After deploying, your endpoint is `https://<your-service>.onrender.com/mcp` (the reference instance above runs from exactly this blueprint). Render's hostname is allowed through DNS rebinding protection automatically via `$RENDER_EXTERNAL_HOSTNAME`; on other platforms, pass your public hostname with `--allowed-host`. Free-tier services sleep when idle, so the first request after a quiet period waits for the host to wake (up to a minute); after that, responses return in well under a second.
+The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`. After deploying, your endpoint is `https://<your-service>.onrender.com/mcp` (the reference instance above runs from exactly this blueprint). Render's hostname is allowed through DNS rebinding protection automatically via `$RENDER_EXTERNAL_HOSTNAME`; on other platforms, pass your public hostname with `--allowed-host`. Free-tier services sleep when idle, so the first request after a quiet period waits for the host to wake (up to a minute); after that, responses return in well under a second.
 
 ## Test
 

@@ -141,6 +141,22 @@ def http_transport_security(
     return TransportSecuritySettings(allowed_hosts=hosts, allowed_origins=origins)
 
 
+def browser_origins(cors_origins: list[str]) -> list[str]:
+    """Browser origins allowed to call /mcp in http mode.
+
+    These are the --cors-origin values. On Render, the GitHub Pages origin of
+    the deployed repo's owner (from $RENDER_GIT_REPO_SLUG, "owner/repo") is
+    added automatically, so a demo page published from the same repo works with
+    no extra configuration.
+    """
+    origins = [origin.rstrip("/") for origin in cors_origins]
+    slug = os.environ.get("RENDER_GIT_REPO_SLUG", "")
+    owner = slug.split("/")[0].strip().lower() if "/" in slug else ""
+    if owner and f"https://{owner}.github.io" not in origins:
+        origins.append(f"https://{owner}.github.io")
+    return origins
+
+
 def build_http_app(extra_hosts: list[str], cors_origins: list[str]) -> Starlette:
     """Build the ASGI app for http mode: MCP at /mcp, liveness at /health.
 
@@ -201,7 +217,8 @@ def main() -> None:
         default=[],
         metavar="ORIGIN",
         help="browser origin allowed to call /mcp in http mode (repeatable), "
-        "for example https://you.github.io; none by default",
+        "for example https://you.github.io; on Render the repo owner's GitHub "
+        "Pages origin is allowed automatically",
     )
     args = parser.parse_args()
 
@@ -210,9 +227,7 @@ def main() -> None:
 
         mcp.settings.host = args.host
         mcp.settings.port = args.port
-        app = build_http_app(
-            args.allowed_host, [origin.rstrip("/") for origin in args.cors_origin]
-        )
+        app = build_http_app(args.allowed_host, browser_origins(args.cors_origin))
         uvicorn.run(
             app,
             host=args.host,

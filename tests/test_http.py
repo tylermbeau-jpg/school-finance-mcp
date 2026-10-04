@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -82,7 +83,7 @@ async def _exercise(url: str) -> None:
 
 
 @contextlib.contextmanager
-def _server(*extra_args: str):
+def _server(*extra_args: str, env: dict | None = None):
     """Run the server in http mode on a free port and yield its base URL."""
     port = _free_port()
     proc = subprocess.Popen(
@@ -96,6 +97,7 @@ def _server(*extra_args: str):
             str(port),
             *extra_args,
         ],
+        env={**os.environ, **(env or {})},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -180,6 +182,13 @@ def test_browser_call_from_allowed_origin():
     data = next(line for line in body.splitlines() if line.startswith("data: "))
     result = json.loads(data[len("data: "):])["result"]
     assert json.loads(result["content"][0]["text"])["valid"] is True
+
+
+def test_browser_call_from_repo_owner_pages_origin_on_render():
+    with _server(env={"RENDER_GIT_REPO_SLUG": "demo-owner/some-repo"}) as base:
+        status, headers, _ = _browser_call(base, "https://demo-owner.github.io")
+    assert status == 200
+    assert headers["access-control-allow-origin"] == "https://demo-owner.github.io"
 
 
 def test_browser_call_from_other_origin_is_refused():

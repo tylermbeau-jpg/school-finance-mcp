@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from school_finance_mcp.server import http_transport_security
+from school_finance_mcp.server import browser_origins, http_transport_security
 
 
 def test_localhost_always_allowed(monkeypatch):
@@ -32,6 +32,19 @@ def test_cors_origin_joins_the_origin_allowlist(monkeypatch):
     ts = http_transport_security([], ["https://demo.example"])
     assert "https://demo.example" in ts.allowed_origins
     assert "demo.example" not in ts.allowed_hosts
+
+
+def test_browser_origins_strip_trailing_slash(monkeypatch):
+    monkeypatch.delenv("RENDER_GIT_REPO_SLUG", raising=False)
+    assert browser_origins(["https://demo.example/"]) == ["https://demo.example"]
+
+
+def test_render_repo_owner_pages_origin_is_added(monkeypatch):
+    monkeypatch.setenv("RENDER_GIT_REPO_SLUG", "Example-Owner/some-repo")
+    assert browser_origins([]) == ["https://example-owner.github.io"]
+    assert browser_origins(["https://example-owner.github.io"]) == [
+        "https://example-owner.github.io"
+    ]
 
 
 def test_wildcard_disables_protection(monkeypatch):
