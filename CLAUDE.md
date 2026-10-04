@@ -7,8 +7,9 @@ MCP server for California school finance, built from public CDE/USDA data only. 
 ## Commands
 
 - Setup: `python3.12 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"` (needs Python 3.10+)
-- Run: `.venv/bin/python -m school_finance_mcp` (MCP over stdio, the default) or `--transport http` for streamable HTTP at /mcp (`--host`/`--port`, $PORT respected; render.yaml deploys this mode)
-- Tests: `.venv/bin/python -m pytest -q` (SACS + CNP suites plus an end-to-end HTTP transport test; keep them passing)
+- Run: `.venv/bin/python -m school_finance_mcp` (MCP over stdio, the default) or `--transport http` for streamable HTTP at /mcp plus a `/health` probe (`--host`/`--port`, $PORT respected; `--cors-origin` lets a browser page on that origin call /mcp; render.yaml deploys this mode)
+- Tests: `.venv/bin/python -m pytest -q` (SACS + CNP suites plus end-to-end http-mode tests; keep them passing)
+- Demo page: `docs/index.html`, served by GitHub Pages at tylermbeau-jpg.github.io/school-finance-mcp. Static, no build step. It wakes the hosted instance through `/health`, then calls `/mcp` from the browser. To test it locally, serve `docs/` on a port, run the server with `--cors-origin http://127.0.0.1:<that port>`, and open the page with `?endpoint=http://127.0.0.1:8000`.
 
 ## Design boundaries
 

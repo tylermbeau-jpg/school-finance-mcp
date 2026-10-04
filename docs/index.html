@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>School Finance MCP: live demo</title>
+<meta name="description" content="Check a California school account string against the state's code lists and valid-combination tables, answered live by an MCP server.">
+<meta property="og:title" content="School Finance MCP: live demo">
+<meta property="og:description" content="Check a California school account string against the state's own rules, answered live by an MCP server.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232647A6'/%3E%3Cpath d='M7 10v12h18V10' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M13 22v-4M19 22v-4' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #FBFCFE;
+  --panel: #F0F4FB;
+  --ink: #0F1A33;
+  --ink-2: #47536E;
+  --form: #2647A6;
+  --form-deep: #1B357F;
+  --rule: #C5D0E8;
+  --gold: #7A4F00;
+  --gold-bg: #FFF1CC;
+  --gold-line: #E0AC2B;
+  --ok: #12633A;
+  --ok-bg: #DFF3E6;
+  --ok-line: #7CC79B;
+  --bad: #A1261D;
+  --bad-bg: #FCE8E6;
+  --bad-line: #E39088;
+  --sans: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 1rem/1.55 var(--sans); }
+a { color: var(--form); }
+:focus-visible { outline: 3px solid var(--gold-line); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.wrap { max-width: 940px; margin-inline: auto; padding-inline: 20px; }
+
+/* Host status strip: the one place that says whether the demo host is asleep, waking, or up. */
+.host { position: relative; overflow: hidden; background: var(--panel); border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+.host-row { display: flex; align-items: center; gap: .65rem; min-height: 3.1rem; padding-block: .6rem; }
+.host-dot { flex: none; width: .7rem; height: .7rem; border-radius: 50%; background: currentColor; }
+.host-text { margin: 0; font-weight: 600; }
+.host-meter { margin-left: auto; font: 500 .95rem/1.2 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.host-note { padding-bottom: .85rem; margin-top: -.2rem; }
+.host-note p { margin: 0; max-width: 64ch; font-size: .95rem; color: var(--ink); }
+.host-note .btn-quiet { margin-top: .6rem; }
+.host-sweep { display: none; position: absolute; left: 0; bottom: 0; width: 28%; height: 2px; background: currentColor; }
+.host[data-state="checking"] .host-sweep,
+.host[data-state="waking"] .host-sweep { display: block; animation: sweep 1.5s linear infinite; }
+.host[data-state="waking"] { background: var(--gold-bg); border-color: var(--gold-line); color: var(--gold); }
+.host[data-state="waking"] .host-dot { background: var(--gold-line); animation: pulse 1.2s ease-in-out infinite; }
+.host[data-state="awake"] { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+.host[data-state="failed"] { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+@keyframes pulse { 50% { transform: scale(1.45); opacity: .55; } }
+
+.intro { padding-block: clamp(2rem, 6vw, 3.4rem) 1.6rem; }
+.eyebrow { margin: 0 0 .9rem; font: 600 .8rem/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--form); }
+h1 { margin: 0; max-width: 19ch; font: 700 clamp(1.75rem, 4.4vw, 2.9rem)/1.08 var(--sans); letter-spacing: -.025em; text-wrap: balance; }
+.lede { margin: 1rem 0 0; max-width: 60ch; font-size: 1.075rem; color: var(--ink-2); }
+
+.ask-label { display: block; margin-bottom: .4rem; font-weight: 600; font-size: .9rem; }
+.ask-row { display: flex; flex-wrap: wrap; gap: .6rem; }
+.ask-input { flex: 1 1 18rem; min-width: 0; padding: .8rem .9rem; border: 1.5px solid var(--form); border-radius: 6px; background: #fff; color: var(--ink); font: 500 1.15rem/1.2 var(--mono); letter-spacing: .02em; }
+.btn { padding: .85rem 1.25rem; border: 1.5px solid var(--form); border-radius: 6px; background: var(--form); color: #fff; font: 600 1rem/1.2 var(--sans); cursor: pointer; }
+.btn:hover { background: var(--form-deep); border-color: var(--form-deep); }
+.btn:disabled { background: #AEB9D6; border-color: #AEB9D6; cursor: progress; }
+.btn-quiet { padding: .55rem .9rem; border: 1.5px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: 600 .92rem/1.2 var(--sans); cursor: pointer; }
+.examples { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .8rem; font-size: .92rem; color: var(--ink-2); }
+.chip { padding: .3rem .75rem; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--form); font: inherit; cursor: pointer; }
+.chip:hover { border-color: var(--form); background: var(--panel); }
+
+.result { margin-top: 1.75rem; overflow: hidden; border: 1px solid var(--rule); border-radius: 10px; background: #fff; }
+.verdict { margin: 0; padding: .9rem 1.25rem; border-bottom: 1px solid var(--rule); background: var(--panel); font-weight: 700; font-size: 1.1rem; }
+.result[data-state="valid"] .verdict { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+.result[data-state="invalid"] .verdict,
+.result[data-state="error"] .verdict { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+
+/* The account string as the state form draws it: six comb fields, one box per digit. */
+.comb { display: flex; align-items: flex-end; gap: clamp(.1rem, .9vw, .6rem); padding: 1.5rem 1.25rem 1.2rem; overflow-x: auto; font: 500 clamp(.68rem, 3.6vw, 2.4rem)/1 var(--mono); }
+.field { display: flex; flex-direction: column; gap: .5rem; }
+.field-label { font: 600 .68rem/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--form); white-space: nowrap; }
+.field-label abbr { text-decoration: none; }
+.digits { display: flex; padding-top: .12em; border: 2px solid var(--form); border-top: 0; }
+.digit { position: relative; display: grid; place-items: center; width: .82em; height: 1.4em; }
+.digit + .digit::before { content: ""; position: absolute; left: 0; bottom: 0; height: .34em; border-left: 1px solid var(--rule); }
+.comb-sep { flex: none; width: .38em; height: 2px; margin-bottom: .68em; background: var(--rule); }
+.field[data-flag="W"] .digits { border-color: var(--gold-line); background: var(--gold-bg); }
+.field[data-flag="W"] .field-label { color: var(--gold); }
+.field[data-flag="F"] .digits { border-color: var(--bad); background: var(--bad-bg); }
+.field[data-flag="F"] .field-label { color: var(--bad); }
+
+.names { display: grid; grid-template-columns: max-content max-content 1fr; gap: .35rem 1rem; margin: 0; padding: .2rem 1.25rem 1.2rem; font-size: .95rem; }
+.names-label { color: var(--ink-2); }
+.names-code { font: 600 .95rem/1.55 var(--mono); }
+
+.findings { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.finding { display: grid; grid-template-columns: 5.4rem 1fr; gap: .15rem .9rem; align-items: start; padding: .8rem 1.25rem; border-bottom: 1px solid var(--rule); }
+.finding:last-child { border-bottom: 0; }
+.tag { justify-self: start; margin-top: .15rem; padding: .3rem .5rem; border-radius: 4px; font: 600 .72rem/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.tag-F { background: var(--bad-bg); color: var(--bad); }
+.tag-W { background: var(--gold-bg); color: var(--gold); }
+.finding-text { margin: 0; }
+.finding-id { display: block; font: 500 .85rem/1.5 var(--mono); color: var(--ink-2); }
+
+.meta { padding: .9rem 1.25rem 1.1rem; border-top: 1px solid var(--rule); background: var(--paper); font-size: .9rem; color: var(--ink-2); }
+.meta p { margin: 0 0 .35rem; }
+.meta .mono { font-family: var(--mono); font-size: .84rem; overflow-wrap: anywhere; }
+.meta-timing { color: var(--ink); font-weight: 600; }
+.wire summary { cursor: pointer; color: var(--form); }
+.wire pre { margin: .6rem 0 0; padding: .8rem 1rem; overflow-x: auto; border-radius: 6px; background: var(--ink); color: #E8EEFB; font: 400 .82rem/1.5 var(--mono); }
+
+.connect { margin-top: 2.6rem; padding-top: 1.6rem; border-top: 1px solid var(--rule); }
+.connect h2 { margin: 0 0 .75rem; font: 700 1.2rem/1.2 var(--sans); }
+.connect p { max-width: 64ch; color: var(--ink-2); }
+.cmd { display: flex; flex-wrap: wrap; gap: .6rem; }
+.cmd code { flex: 1 1 20rem; padding: .85rem 1rem; overflow-x: auto; border-radius: 6px; background: var(--ink); color: #E8EEFB; font: 500 .9rem/1.5 var(--mono); white-space: nowrap; }
+.cmd .btn-quiet { color: var(--form); }
+
+.foot { margin-top: 3rem; padding-block: 1.4rem 2.4rem; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-2); }
+.foot p { margin: 0 0 .3rem; max-width: 72ch; }
+
+@media (max-width: 560px) {
+  .field-label { display: none; }
+  .comb { padding: 1.2rem .75rem 1rem; }
+  .verdict, .finding, .meta { padding-inline: .9rem; }
+  .names { grid-template-columns: max-content 1fr; padding-inline: .9rem; }
+  .names-label { grid-column: 1 / -1; margin-top: .3rem; font-size: .82rem; }
+  .finding { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) {
+  .ask-input { padding-inline: .7rem; font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .host-sweep, .host-dot { animation: none !important; }
+  .host-sweep { width: 100%; opacity: .45; }
+}
+</style>
+</head>
+<body>
+
+<div class="host" id="host" data-state="checking">
+  <div class="wrap host-row">
+    <span class="host-dot" aria-hidden="true"></span>
+    <p class="host-text" id="hostText" role="status">Checking the demo host</p>
+    <span class="host-meter" id="hostMeter" aria-hidden="true"></span>
+  </div>
+  <div class="wrap host-note" id="hostNote" hidden>
+    <p id="hostNoteText"></p>
+    <button class="btn-quiet" id="retryBtn" type="button" hidden>Try again</button>
+  </div>
+  <div class="host-sweep" aria-hidden="true"></div>
+</div>
+
+<main class="wrap">
+  <div class="intro">
+    <p class="eyebrow">School Finance MCP, live demo</p>
+    <h1>Check a California school account string against the state's own rules.</h1>
+    <p class="lede">This page calls the same server an AI agent would, over the Model Context Protocol. The server checks the 19-digit string against the California Department of Education's code lists and valid-combination tables.</p>
+  </div>
+
+  <form class="ask" id="askForm" autocomplete="off">
+    <label class="ask-label" for="acct">Account string</label>
+    <div class="ask-row">
+      <input class="ask-input" id="acct" name="acct" inputmode="numeric" spellcheck="false" value="01-0000-0-1110-1000-1100" aria-describedby="acctHelp">
+      <button class="btn" id="checkBtn" type="submit" disabled>Check string</button>
+    </div>
+    <div class="examples" id="acctHelp">
+      <span>Or try:</span>
+      <button class="chip" type="button" data-string="01-0000-0-1110-1000-1100">teacher salaries in the General Fund</button>
+      <button class="chip" type="button" data-string="21-5310-0-0000-3700-4700">cafeteria spending in the Building Fund</button>
+      <button class="chip" type="button" data-string="01-0000-0-1110-1000-110">a string one digit short</button>
+    </div>
+  </form>
+
+  <section class="result" id="result" data-state="idle" aria-live="polite">
+    <p class="verdict" id="verdict">The first check runs as soon as the demo host answers.</p>
+    <div class="comb" id="comb" aria-label="The account string split into its six fields"></div>
+    <div class="names" id="names" hidden></div>
+    <ul class="findings" id="findings" hidden></ul>
+    <div class="meta" id="meta" hidden>
+      <p class="meta-timing" id="timing"></p>
+      <p class="mono" id="checks"></p>
+      <details class="wire">
+        <summary>See the request this page sent</summary>
+        <pre id="wireBody"></pre>
+      </details>
+    </div>
+  </section>
+
+  <section class="connect">
+    <h2>Connect it to Claude Code</h2>
+    <div class="cmd">
+      <code id="cmd">claude mcp add --transport http school-finance https://school-finance-mcp.onrender.com/mcp</code>
+      <button class="btn-quiet" id="copyBtn" type="button">Copy command</button>
+    </div>
+    <p>The server has four tools: validate a string, decode it into plain names, list the valid codes for a field, and compute school-meal reimbursement. Source, tests, and setup steps are on <a href="https://github.com/tylermbeau-jpg/school-finance-mcp">GitHub</a>.</p>
+  </section>
+
+  <noscript><p>This demo needs JavaScript. The same example is written out in the README on GitHub.</p></noscript>
+</main>
+
+<footer class="wrap">
+  <div class="foot">
+    <p>Built by Tyler Beauregard. MIT licensed.</p>
+    <p>Reference data comes from public California Department of Education and USDA releases. This is an illustration, not an official technical review.</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ?endpoint=https://your-server points this page at another deployment (a fork, or a local run).
+  // ?s=01-0000-0-1110-1000-1100 opens the page on that string.
+  const DEFAULT_BASE = 'https://school-finance-mcp.onrender.com';
+  const query = new URLSearchParams(location.search);
+  let BASE = DEFAULT_BASE;
+  try {
+    const custom = query.get('endpoint');
+    if (custom && /^https?:$/.test(new URL(custom).protocol)) BASE = custom.replace(/\/+$/, '');
+  } catch (_) { /* keep the default */ }
+  const MCP_URL = BASE + '/mcp';
+
+  const FIELDS = [
+    ['fund', 2, 'Fund'],
+    ['resource', 4, 'Resource'],
+    ['project_year', 1, 'Project year'],
+    ['goal', 4, 'Goal'],
+    ['function', 4, 'Function'],
+    ['object', 4, 'Object'],
+  ];
+  const WAKE_LIMIT_MS = 120000;  // give up after two minutes
+  const SLOW_MS = 1500;          // no answer by now means the host was asleep
+  const STALE_MS = 10 * 60000;   // the host sleeps after about 15 idle minutes
+
+  const $ = (id) => document.getElementById(id);
+  const host = $('host'), hostText = $('hostText'), hostMeter = $('hostMeter');
+  const hostNote = $('hostNote'), hostNoteText = $('hostNoteText'), retryBtn = $('retryBtn');
+  const form = $('askForm'), input = $('acct'), checkBtn = $('checkBtn');
+  const result = $('result'), verdict = $('verdict'), comb = $('comb'), names = $('names');
+  const findings = $('findings'), meta = $('meta'), timing = $('timing'), checks = $('checks'), wireBody = $('wireBody');
+
+  let lastContact = 0;
+  let rpcId = 0;
+  let busy = false;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const clock = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  };
+  const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  // ---- host status -------------------------------------------------------
+
+  function setHost(state, info = {}) {
+    host.dataset.state = state;
+    retryBtn.hidden = true;
+    hostNote.hidden = true;
+    if (state === 'checking') {
+      hostText.textContent = 'Checking the demo host';
+      hostMeter.textContent = '';
+    } else if (state === 'waking') {
+      hostText.textContent = 'Demo host is waking up';
+      hostNoteText.textContent = 'The server is fine. It runs on free hosting that sleeps when idle, and waking takes up to a minute. Once awake it answers in a fraction of a second, and the first check runs on its own.';
+      hostNote.hidden = false;
+    } else if (state === 'awake') {
+      hostText.textContent = info.wokeMs
+        ? 'Demo host is awake (woke in ' + Math.round(info.wokeMs / 1000) + ' s)'
+        : 'Demo host is awake';
+      hostMeter.textContent = 'answering in ' + Math.round(info.warmMs) + ' ms';
+    } else if (state === 'failed') {
+      hostText.textContent = 'The demo host did not answer after two minutes';
+      hostMeter.textContent = '';
+      hostNoteText.textContent = 'Try again, or run the server on your own machine with the setup steps on GitHub.';
+      hostNote.hidden = false;
+      retryBtn.hidden = false;
+    }
+  }
+
+  async function ping() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 75000);
+    const started = performance.now();
+    try {
+      const res = await fetch(BASE + '/health', { cache: 'no-store', signal: controller.signal });
+      return res.ok ? performance.now() - started : null;
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Ask the host for a sign of life. A sleeping host holds the request until it
+  // is up, so a slow first answer is the wake itself, not a slow server.
+  async function wakeHost() {
+    setHost('checking');
+    const started = performance.now();
+    let slow = false;
+    const ticker = setInterval(() => {
+      const elapsed = performance.now() - started;
+      if (!slow && elapsed > SLOW_MS) { slow = true; setHost('waking'); }
+      if (slow) hostMeter.textContent = clock(elapsed);
+    }, 250);
+
+    let up = false;
+    while (performance.now() - started < WAKE_LIMIT_MS) {
+      if (await ping() !== null) { up = true; break; }
+      await sleep(2500);
+    }
+    clearInterval(ticker);
+    if (!up) { setHost('failed'); return false; }
+
+    const wokeMs = performance.now() - started;
+    const warmMs = await ping();  // second request on the open connection: the steady-state speed
+    lastContact = Date.now();
+    setHost('awake', { wokeMs: slow ? wokeMs : 0, warmMs: warmMs !== null ? warmMs : wokeMs });
+    return true;
+  }
+
+  // ---- MCP call ----------------------------------------------------------
+
+  async function callTool(name, args) {
+    const body = { jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } };
+    const started = performance.now();
+    const res = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'accept': 'application/json, text/event-stream' },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    const ms = performance.now() - started;
+    if (!res.ok) throw new Error('The server answered HTTP ' + res.status + '.');
+    // Stateless streamable HTTP answers a lone call as JSON or as one server-sent event.
+    const line = text.split('\n').find((l) => l.startsWith('data:'));
+    const message = JSON.parse(line ? line.slice(5) : text);
+    if (message.error) throw new Error(message.error.message || 'The server returned an error.');
+    if (message.result.isError) throw new Error(message.result.content[0].text);
+    lastContact = Date.now();
+    return { payload: JSON.parse(message.result.content[0].text), ms, body };
+  }
+
+  // ---- rendering ---------------------------------------------------------
+
+  function splitLocal(raw) {
+    let parts = raw.trim().split(/[-\s./]+/).filter(Boolean);
+    if (parts.length === 1 && /^\d+$/.test(parts[0])) {
+      const packed = parts[0];
+      let at = 0;
+      parts = FIELDS.map(([, width]) => { const piece = packed.slice(at, at + width); at += width; return piece; });
+    }
+    return FIELDS.map((_, i) => parts[i] || '');
+  }
+
+  function renderComb(codes, flags) {
+    comb.replaceChildren();
+    FIELDS.forEach(([key, width, label], i) => {
+      if (i) comb.append(el('span', 'comb-sep'));
+      const field = el('div', 'field');
+      if (flags[key]) field.dataset.flag = flags[key];
+      const tag = el('span', 'field-label');
+      if (key === 'project_year') {
+        const abbr = el('abbr', '', 'PY');
+        abbr.title = label;
+        tag.append(abbr);
+      } else {
+        tag.textContent = label;
+      }
+      const digits = el('div', 'digits');
+      const code = codes[i] || '';
+      for (let d = 0; d < Math.max(width, code.length); d++) digits.append(el('span', 'digit', code[d] || ''));
+      field.append(tag, digits);
+      comb.append(field);
+    });
+  }
+
+  function clearDetail() {
+    names.hidden = true; names.replaceChildren();
+    findings.hidden = true; findings.replaceChildren();
+    meta.hidden = true;
+  }
+
+  function addFinding(severity, word, id, message) {
+    const item = el('li', 'finding');
+    const text = el('p', 'finding-text', message);
+    if (id) text.append(el('span', 'finding-id', id));
+    item.append(el('span', 'tag tag-' + severity, word), text);
+    findings.append(item);
+    findings.hidden = false;
+  }
+
+  function render(check, decoded, ms, body, raw) {
+    clearDetail();
+    const flags = {};
+    const flag = (key, severity) => { if (flags[key] !== 'F') flags[key] = severity; };
+    const cde = check.cde_checks;
+    const problems = cde ? [...cde.code_errors, ...cde.combination_errors] : [];
+
+    (check.errors || []).forEach((message) => {
+      const key = message.split(' ')[0];
+      if (FIELDS.some(([k]) => k === key)) flag(key, 'F');
+      addFinding('F', 'Structure', '', message);
+    });
+    problems.forEach((p) => {
+      p.dimensions.forEach((key) => flag(key, p.severity === 'F' ? 'F' : 'W'));
+      addFinding(p.severity === 'F' ? 'F' : 'W', p.severity_word, p.check, p.message);
+    });
+
+    const codes = check.components ? FIELDS.map(([key]) => check.components[key]) : splitLocal(raw);
+    renderComb(codes, flags);
+
+    if (check.valid) {
+      result.dataset.state = 'valid';
+      verdict.textContent = 'Valid for ' + check.tables + '. ' + plural(cde.passed.length, 'check') + ' passed.';
+    } else if (!check.components) {
+      result.dataset.state = 'invalid';
+      verdict.textContent = 'Not a complete account string.';
+    } else {
+      const fatal = problems.filter((p) => p.severity === 'F').length;
+      const warn = problems.length - fatal;
+      const counts = [fatal && plural(fatal, 'fatal error'), warn && plural(warn, 'warning')].filter(Boolean).join(', ');
+      result.dataset.state = 'invalid';
+      verdict.textContent = 'Not valid for ' + check.tables + ': ' + counts + '.';
+    }
+
+    // decode_sacs_string names each code once the string passes validation.
+    const named = decoded && decoded.valid && decoded.components;
+    if (named) {
+      FIELDS.forEach(([key, , label]) => {
+        const part = named[key];
+        names.append(el('span', 'names-label', label), el('span', 'names-code', part.code), el('span', '', part.description));
+      });
+      names.hidden = false;
+    }
+
+    timing.textContent = 'Answered in ' + Math.round(ms) + ' ms, round trip from your browser.';
+    const lines = [];
+    if (cde) {
+      if (cde.passed.length) lines.push('Passed: ' + cde.passed.join(', ') + '.');
+      if (cde.not_covered.length) lines.push("Not covered by CDE's tables: " + cde.not_covered.join(', ') + '.');
+      if (cde.not_evaluated.length) lines.push('Not evaluated: ' + cde.not_evaluated.join(', ') + '.');
+    }
+    checks.textContent = lines.join(' ');
+    checks.hidden = !lines.length;
+    wireBody.textContent = 'POST ' + MCP_URL + '\n\n' + JSON.stringify(body, null, 2);
+    meta.hidden = false;
+  }
+
+  async function runCheck() {
+    const raw = input.value.trim();
+    if (!raw || busy) return;
+    busy = true;
+    checkBtn.disabled = true;
+    try {
+      if (Date.now() - lastContact > STALE_MS && !(await wakeHost())) return;
+      checkBtn.textContent = 'Checking string';
+      const [check, decoded] = await Promise.all([
+        callTool('validate_sacs_string', { account_string: raw }),
+        callTool('decode_sacs_string', { account_string: raw }).catch(() => null),
+      ]);
+      render(check.payload, decoded && decoded.payload, check.ms, check.body, raw);
+    } catch (err) {
+      clearDetail();
+      result.dataset.state = 'error';
+      verdict.textContent = 'The check did not finish. ' + (err && err.message ? err.message : '') + ' Check string to try again.';
+    } finally {
+      busy = false;
+      checkBtn.textContent = 'Check string';
+      checkBtn.disabled = host.dataset.state === 'failed';
+    }
+  }
+
+  // ---- wiring ------------------------------------------------------------
+
+  form.addEventListener('submit', (event) => { event.preventDefault(); runCheck(); });
+  input.addEventListener('input', () => {
+    clearDetail();
+    result.dataset.state = 'idle';
+    verdict.textContent = 'Edited. Check string to see the result.';
+    renderComb(splitLocal(input.value), {});
+  });
+  document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      if (busy) return;
+      input.value = chip.dataset.string;
+      runCheck();
+    });
+  });
+  retryBtn.addEventListener('click', runCheck);
+  $('copyBtn').addEventListener('click', async (event) => {
+    try {
+      await navigator.clipboard.writeText($('cmd').textContent);
+      event.target.textContent = 'Copied';
+    } catch (_) {
+      event.target.textContent = 'Select the command to copy it';
+    }
+    setTimeout(() => { event.target.textContent = 'Copy command'; }, 2500);
+  });
+
+  if (query.get('s')) input.value = query.get('s').slice(0, 40);
+  if (BASE !== DEFAULT_BASE) $('cmd').textContent = 'claude mcp add --transport http school-finance ' + MCP_URL;
+  renderComb(splitLocal(input.value), {});
+  runCheck();
+})();
+</script>
+</body>
+</html>

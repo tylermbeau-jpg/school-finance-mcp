@@ -1,16 +1,21 @@
-"""End-to-end test of the streamable HTTP transport.
+"""End-to-end tests of http mode.
 
-Spawns the server as a real subprocess on a free port, then drives it with the
-official MCP streamable HTTP client: initialize, list tools, and call two tools.
+Each test spawns the server as a real subprocess on a free port. One drives it
+with the official MCP streamable HTTP client (initialize, list tools, call two
+tools); the others hit it the way a browser page would: the /health probe, a
+CORS preflight, and a direct tools/call from allowed and refused origins.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 
 import anyio
 from mcp import ClientSession
@@ -76,7 +81,9 @@ async def _exercise(url: str) -> None:
             assert _payload(result)["total_reimbursement"] > 0
 
 
-def test_http_transport_end_to_end():
+@contextlib.contextmanager
+def _server(*extra_args: str):
+    """Run the server in http mode on a free port and yield its base URL."""
     port = _free_port()
     proc = subprocess.Popen(
         [
@@ -87,13 +94,96 @@ def test_http_transport_end_to_end():
             "http",
             "--port",
             str(port),
+            *extra_args,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         _wait_for_port(port, proc)
-        anyio.run(_exercise, f"http://127.0.0.1:{port}/mcp")
+        yield f"http://127.0.0.1:{port}"
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+def test_http_transport_end_to_end():
+    with _server() as base:
+        anyio.run(_exercise, f"{base}/mcp")
+
+
+DEMO_ORIGIN = "https://demo.example"
+
+_CALL = json.dumps(
+    {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "validate_sacs_string",
+            "arguments": {"account_string": "01-0000-0-1110-1000-1100"},
+        },
+    }
+).encode()
+
+
+def _request(url: str, method: str = "GET", headers: dict | None = None, body: bytes | None = None):
+    req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, resp.headers, resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.headers, exc.read().decode()
+
+
+def _browser_call(base: str, origin: str):
+    return _request(
+        f"{base}/mcp",
+        method="POST",
+        headers={
+            "Origin": origin,
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        body=_CALL,
+    )
+
+
+def test_health_is_readable_from_any_origin():
+    with _server() as base:
+        status, headers, body = _request(
+            f"{base}/health", headers={"Origin": "https://anywhere.example"}
+        )
+    assert status == 200
+    assert json.loads(body) == {"status": "ok"}
+    assert headers["access-control-allow-origin"] == "*"
+
+
+def test_browser_call_from_allowed_origin():
+    with _server("--cors-origin", DEMO_ORIGIN) as base:
+        status, headers, _ = _request(
+            f"{base}/mcp",
+            method="OPTIONS",
+            headers={
+                "Origin": DEMO_ORIGIN,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert status == 200
+        assert headers["access-control-allow-origin"] == DEMO_ORIGIN
+
+        status, headers, body = _browser_call(base, DEMO_ORIGIN)
+    assert status == 200
+    assert headers["access-control-allow-origin"] == DEMO_ORIGIN
+    # Stateless http answers a lone tools/call as one server-sent event.
+    data = next(line for line in body.splitlines() if line.startswith("data: "))
+    result = json.loads(data[len("data: "):])["result"]
+    assert json.loads(result["content"][0]["text"])["valid"] is True
+
+
+def test_browser_call_from_other_origin_is_refused():
+    with _server("--cors-origin", DEMO_ORIGIN) as base:
+        status, headers, _ = _browser_call(base, "https://other.example")
+    assert status == 403
+    assert headers.get("access-control-allow-origin") is None

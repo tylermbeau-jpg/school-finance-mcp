@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install .
-    startCommand: python -m school_finance_mcp --transport http --host 0.0.0.0
+    startCommand: python -m school_finance_mcp --transport http --host 0.0.0.0 --cors-origin https://tylermbeau-jpg.github.io
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.6

@@ -1,4 +1,4 @@
-"""Unit tests for the http-mode Host allowlist."""
+"""Unit tests for the http-mode Host and Origin allowlists."""
 
 from __future__ import annotations
 
@@ -25,6 +25,13 @@ def test_extra_host_flag(monkeypatch):
     ts = http_transport_security(["mcp.example.com"])
     assert "mcp.example.com" in ts.allowed_hosts
     assert "mcp.example.com:*" in ts.allowed_hosts
+
+
+def test_cors_origin_joins_the_origin_allowlist(monkeypatch):
+    monkeypatch.delenv("RENDER_EXTERNAL_HOSTNAME", raising=False)
+    ts = http_transport_security([], ["https://demo.example"])
+    assert "https://demo.example" in ts.allowed_origins
+    assert "demo.example" not in ts.allowed_hosts
 
 
 def test_wildcard_disables_protection(monkeypatch):

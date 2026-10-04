@@ -9,7 +9,9 @@ A Model Context Protocol (MCP) server that gives an LLM agent first-class tools 
 
 It is a small, self-contained server built with the official MCP Python SDK (FastMCP). The point is to take a gnarly, real-world domain (California K-12 fund accounting and child-nutrition reimbursement) and expose it as clean, agent-callable tools with typed inputs and structured output.
 
-A live instance runs at `https://school-finance-mcp.onrender.com/mcp` (streamable HTTP, free tier, so the first request after idle takes a few seconds). Try it:
+**[Try the live demo](https://tylermbeau-jpg.github.io/school-finance-mcp/)**: check an account string in your browser against the hosted server. The page calls the real `/mcp` endpoint and shows the result, the checks applied, and the response time.
+
+The hosted instance answers in well under a second. It runs on a free host that sleeps when idle, so the demo page wakes it and shows when it is ready (a wake takes up to a minute). If the host is asleep when a client connects, the first request waits for that wake, so open the demo page first. To connect Claude Code to the same instance:
 
 ```bash
 claude mcp add --transport http school-finance https://school-finance-mcp.onrender.com/mcp
@@ -89,11 +91,18 @@ claude mcp add --transport http school-finance http://127.0.0.1:8000/mcp
 
 The HTTP mode is stateless (every tool is a pure function), so it works behind restarts and load balancers with no session store.
 
+Two more things come with http mode:
+
+- `GET /health` returns `{"status": "ok"}` and is readable from any origin, so a status page or uptime check can tell a host that is still waking from a server that is up.
+- `--cors-origin https://your-site.example` (repeatable) lets a page on that origin call `/mcp` straight from the browser. Without it, browser calls from other origins are refused.
+
+The [live demo](https://tylermbeau-jpg.github.io/school-finance-mcp/) is a single static page in `docs/` that uses both. Add `?endpoint=https://your-server` to its URL to point it at another deployment.
+
 ### Deploy to Render
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tylermbeau-jpg/school-finance-mcp)
 
-The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`. After deploying, your endpoint is `https://<your-service>.onrender.com/mcp` (the reference instance above runs from exactly this blueprint). Render's hostname is allowed through DNS rebinding protection automatically via `$RENDER_EXTERNAL_HOSTNAME`; on other platforms, pass your public hostname with `--allowed-host`. Free-tier services sleep when idle, so the first request after a quiet period takes a few seconds.
+The repo ships a `render.yaml` blueprint: a free-tier Python web service running `python -m school_finance_mcp --transport http --host 0.0.0.0`, plus a `--cors-origin` for this repo's demo page (change or drop it in your own fork). After deploying, your endpoint is `https://<your-service>.onrender.com/mcp` (the reference instance above runs from exactly this blueprint). Render's hostname is allowed through DNS rebinding protection automatically via `$RENDER_EXTERNAL_HOSTNAME`; on other platforms, pass your public hostname with `--allowed-host`. Free-tier services sleep when idle, so the first request after a quiet period waits for the host to wake (up to a minute); after that, responses return in well under a second.
 
 ## Test
 

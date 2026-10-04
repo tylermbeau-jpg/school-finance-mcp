@@ -2,7 +2,8 @@
 
 Exposes California SACS account-string tools and a school-meal reimbursement
 calculator over the Model Context Protocol. Speaks stdio by default for local
-clients, or streamable HTTP (at /mcp) for remote use.
+clients, or streamable HTTP (at /mcp, with a liveness probe at /health) for
+remote use.
 """
 
 from __future__ import annotations
@@ -12,6 +13,10 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from . import cnp, sacs
 
@@ -97,13 +102,29 @@ def calculate_meal_reimbursement(
     )
 
 
-def http_transport_security(extra_hosts: list[str]) -> TransportSecuritySettings:
-    """Build the Host-header allowlist for http mode.
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request: Request) -> JSONResponse:
+    """Liveness probe for http mode.
+
+    Readable from any origin, so a status page can tell a host that is still
+    waking from a server that is up. Reports nothing but the fact it answered.
+    """
+    return JSONResponse(
+        {"status": "ok"},
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"},
+    )
+
+
+def http_transport_security(
+    extra_hosts: list[str], cors_origins: list[str] | None = None
+) -> TransportSecuritySettings:
+    """Build the Host and Origin allowlists for http mode.
 
     Localhost forms are always allowed. On Render, the public hostname arrives
-    via $RENDER_EXTERNAL_HOSTNAME and is allowed automatically. Pass "*" as an
-    extra host to disable DNS rebinding protection entirely (only sensible
-    behind a proxy that already pins the Host header).
+    via $RENDER_EXTERNAL_HOSTNAME and is allowed automatically. `cors_origins`
+    are extra browser origins allowed to call the server. Pass "*" as an extra
+    host to disable DNS rebinding protection entirely (only sensible behind a
+    proxy that already pins the Host header).
     """
     if "*" in extra_hosts:
         return TransportSecuritySettings(enable_dns_rebinding_protection=False)
@@ -116,7 +137,29 @@ def http_transport_security(extra_hosts: list[str]) -> TransportSecuritySettings
     for host in extra_hosts:
         hosts.extend([host, f"{host}:*"])
         origins.extend([f"https://{host}", f"http://{host}"])
+    origins.extend(cors_origins or [])
     return TransportSecuritySettings(allowed_hosts=hosts, allowed_origins=origins)
+
+
+def build_http_app(extra_hosts: list[str], cors_origins: list[str]) -> Starlette:
+    """Build the ASGI app for http mode: MCP at /mcp, liveness at /health.
+
+    `cors_origins` are browser origins allowed to call /mcp directly (a demo
+    page, for example). Each one joins the Origin allowlist and gets CORS
+    headers. With none, pages on other origins stay blocked.
+    """
+    mcp.settings.transport_security = http_transport_security(extra_hosts, cors_origins)
+    app = mcp.streamable_http_app()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["accept", "content-type", "mcp-protocol-version", "mcp-session-id"],
+            expose_headers=["mcp-session-id"],
+            max_age=86400,
+        )
+    return app
 
 
 def main() -> None:
@@ -129,7 +172,8 @@ def main() -> None:
         "--transport",
         choices=["stdio", "http"],
         default="stdio",
-        help="stdio for local clients (default); http serves streamable HTTP at /mcp",
+        help="stdio for local clients (default); http serves streamable HTTP at /mcp "
+        "and a liveness probe at /health",
     )
     parser.add_argument(
         "--host",
@@ -151,13 +195,30 @@ def main() -> None:
         "localhost and $RENDER_EXTERNAL_HOSTNAME are always allowed; "
         "'*' disables the host check",
     )
+    parser.add_argument(
+        "--cors-origin",
+        action="append",
+        default=[],
+        metavar="ORIGIN",
+        help="browser origin allowed to call /mcp in http mode (repeatable), "
+        "for example https://you.github.io; none by default",
+    )
     args = parser.parse_args()
 
     if args.transport == "http":
+        import uvicorn
+
         mcp.settings.host = args.host
         mcp.settings.port = args.port
-        mcp.settings.transport_security = http_transport_security(args.allowed_host)
-        mcp.run(transport="streamable-http")
+        app = build_http_app(
+            args.allowed_host, [origin.rstrip("/") for origin in args.cors_origin]
+        )
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=mcp.settings.log_level.lower(),
+        )
     else:
         mcp.run()
 
